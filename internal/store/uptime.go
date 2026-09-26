@@ -27,48 +27,22 @@ func RunUptimeScorer(ctx context.Context, db *DB, interval time.Duration) error 
 }
 
 func scoreUptime(ctx context.Context, db *DB) error {
-	rows, err := db.Pool.Query(ctx, `SELECT id FROM nodes`)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	var nodeIDs []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return err
-		}
-		nodeIDs = append(nodeIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-
-	for _, nodeID := range nodeIDs {
-		var count int64
-		err := db.Pool.QueryRow(ctx, `
-			SELECT COUNT(*) FROM node_heartbeat_events
-			WHERE node_id = $1 AND recorded_at > NOW() - INTERVAL '7 days'`,
-			nodeID,
-		).Scan(&count)
-		if err != nil {
-			return err
-		}
-
-		pct := float64(count) / 20160.0 * 100.0
-		if pct > 100.0 {
-			pct = 100.0
-		}
-
-		_, err = db.Pool.Exec(ctx,
-			`UPDATE nodes SET uptime_pct = $1 WHERE id = $2`,
-			pct, nodeID,
+	_, err := db.Pool.Exec(ctx, `
+		WITH heartbeat_counts AS (
+			SELECT node_id, COUNT(*) AS count
+			FROM node_heartbeat_events
+			WHERE recorded_at > NOW() - INTERVAL '7 days'
+			GROUP BY node_id
+		), scores AS (
+			SELECT n.id,
+			       LEAST(COALESCE(h.count, 0)::numeric / 20160 * 100, 100) AS uptime_pct
+			FROM nodes n
+			LEFT JOIN heartbeat_counts h ON h.node_id = n.id
 		)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+		UPDATE nodes n
+		SET uptime_pct = s.uptime_pct
+		FROM scores s
+		WHERE n.id = s.id`,
+	)
+	return err
 }
