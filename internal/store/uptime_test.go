@@ -59,17 +59,12 @@ func TestRunUptimeScorer(t *testing.T) {
 	// Seed heartbeats: 20160 expected over 7 days (one per 30s).
 	// Insert 19152 heartbeats → 19152/20160 ≈ 94.97% → below Class A (95%), above Class B (85%).
 	heartbeatCount := 19152
-	now := time.Now()
-	for i := 0; i < heartbeatCount; i++ {
-		ts := now.Add(-time.Duration(i) * 30 * time.Second)
-		_, err = db.Pool.Exec(ctx, `
-			INSERT INTO node_heartbeat_events (node_id, recorded_at)
-			VALUES ($1, $2)`,
-			nodeID, ts,
-		)
-		if err != nil {
-			t.Fatalf("insert heartbeat %d: %v", i, err)
-		}
+	_, err = db.Pool.Exec(ctx, `
+		INSERT INTO node_heartbeat_events (node_id, recorded_at)
+		SELECT $1, NOW() - n * INTERVAL '30 seconds'
+		FROM generate_series(0, $2 - 1) AS n`, nodeID, heartbeatCount)
+	if err != nil {
+		t.Fatalf("insert heartbeats: %v", err)
 	}
 
 	// Run the scorer via RunUptimeScorer with a short interval.
