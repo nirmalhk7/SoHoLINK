@@ -1,0 +1,56 @@
+{{define "content"}}
+<div class="container">
+  {{template "transitional_banner" .}}
+  <div class="page-header">
+    <div>
+      <div class="page-header-label">Consumer</div>
+      <h2>Job History</h2>
+    </div>
+    <span style="color:var(--muted);font-size:0.8rem;">{{.Email}}</span>
+  </div>
+
+  <form method="GET" action="/consumer/jobs" class="card" style="margin-bottom:1.5rem;">
+    <div class="form-group">
+      <label for="history-status">Status</label>
+      <select id="history-status" name="status">
+        <option value="">All statuses</option>
+        {{range .Statuses}}<option value="{{.Value}}"{{if eq $.Status .Value}} selected{{end}}>{{.Label}}</option>{{end}}
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="history-workload">Workload</label>
+      <select id="history-workload" name="workload_type">
+        <option value="">All workloads</option>
+        {{range .Workloads}}<option value="{{.Value}}"{{if eq $.Workload .Value}} selected{{end}}>{{.Label}}</option>{{end}}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-outline">Filter jobs</button>
+    <a href="/consumer/jobs" class="btn btn-outline">Clear filters</a>
+  </form>
+
+  <p style="color:var(--muted);">{{len .Jobs}} jobs shown, newest first.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Job ID</th><th>Workload</th><th>Status</th><th>Submitted (UTC)</th><th></th></tr></thead>
+      <tbody>
+        {{range .Jobs}}
+        <tr>
+          <td><code>{{.JobID}}</code></td>
+          <td>{{.Workload}}</td>
+          <td><span class="badge">{{.Status}}</span></td>
+          <td>{{.CreatedAt.UTC.Format "2006-01-02 15:04:05"}}</td>
+          <td><a href="/consumer/job/{{.JobID}}" aria-label="View job {{.JobID}}">View job</a></td>
+        </tr>
+        {{else}}
+        <tr><td colspan="5">No jobs match these filters. <a href="/consumer/marketplace">Browse capacity</a> or clear your filters.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <nav aria-label="Job history pages" style="margin-top:1.5rem;">
+    {{if .FirstURL}}<a href="{{.FirstURL}}" class="btn btn-outline">Newest jobs</a>{{end}}
+    {{if .NextURL}}<a href="{{.NextURL}}" rel="next" class="btn btn-outline">Older jobs &rarr;</a>{{end}}
+  </nav>
+</div>
+{{end}}
+{{template "layout" .}}

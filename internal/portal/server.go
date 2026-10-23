@@ -362,6 +362,8 @@ func New(db *store.DB, addr string, privateKey ed25519.PrivateKey, templatesDir 
 		RequireAuth(sm, http.HandlerFunc(ps.handleDashboard)))
 	mux.Handle("GET /marketplace",
 		RequireAuth(sm, http.HandlerFunc(ps.handleConsumerMarketplace)))
+	mux.Handle("GET /consumer/jobs",
+		RequireAuth(sm, http.HandlerFunc(ps.handleJobHistory)))
 	mux.Handle("GET /consumer/marketplace",
 		RequireAuth(sm, http.HandlerFunc(ps.handleConsumerMarketplace)))
 	mux.Handle("POST /consumer/job",
