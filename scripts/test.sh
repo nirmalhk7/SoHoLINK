@@ -62,23 +62,23 @@ echo -e "${GREEN}═════════════════════
 echo ""
 
 # Build flags
-TEST_FLAGS="-v -timeout ${TEST_TIMEOUT}"
+TEST_FLAGS=(-v -timeout "$TEST_TIMEOUT")
 if [ "$SHORT_MODE" = true ]; then
-	TEST_FLAGS="${TEST_FLAGS} -short"
+	TEST_FLAGS+=(-short)
 	echo -e "${YELLOW}Mode: Short (skipping slow tests)${NC}"
 else
 	echo -e "${YELLOW}Mode: Full${NC}"
 fi
 
 if [ "$RACE_DETECTION" = true ]; then
-	TEST_FLAGS="${TEST_FLAGS} -race"
+	TEST_FLAGS+=(-race)
 	echo -e "${YELLOW}Race detection: Enabled${NC}"
 else
 	echo -e "${YELLOW}Race detection: Disabled${NC}"
 fi
 
 if [ "$COVERAGE" = true ]; then
-	TEST_FLAGS="${TEST_FLAGS} -coverprofile=coverage.out"
+	TEST_FLAGS+=(-coverprofile=coverage.out)
 	echo -e "${YELLOW}Coverage: Enabled${NC}"
 else
 	echo -e "${YELLOW}Coverage: Disabled${NC}"
@@ -91,7 +91,7 @@ echo -e "${GREEN}─────────────────────
 echo ""
 
 # Run tests
-if go test ${TEST_FLAGS} ./internal/...; then
+if go test "${TEST_FLAGS[@]}" ./internal/...; then
 	echo ""
 	echo -e "${GREEN}✓ All tests passed!${NC}"
 	EXIT_CODE=0

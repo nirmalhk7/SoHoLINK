@@ -27,33 +27,11 @@ const maxBindBody = 1 << 20 // 1 MiB
 func bindNodeID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodPost &&
-			(r.URL.Path == "/v0/listing" || r.URL.Path == "/v0/heartbeat" ||
-				r.URL.Path == "/v0/decline" || r.URL.Path == "/v0/report"):
-			body, err := io.ReadAll(io.LimitReader(r.Body, maxBindBody+1))
-			if err != nil {
-				http.Error(w, "failed to read body", http.StatusBadRequest)
+		case r.Method == http.MethodPost && nodePostPath(r.URL.Path):
+			nodeID, ok := readPostNode(w, r)
+			if !ok || !authorize(w, r, nodeID) {
 				return
 			}
-			if len(body) > maxBindBody {
-				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
-				return
-			}
-			var probe struct {
-				NodeID string
-			}
-			if err := json.Unmarshal(body, &probe); err != nil {
-				http.Error(w, "bad json", http.StatusBadRequest)
-				return
-			}
-			if probe.NodeID == "" {
-				http.Error(w, "missing NodeID", http.StatusBadRequest)
-				return
-			}
-			if !authorize(w, r, probe.NodeID) {
-				return
-			}
-			r.Body = io.NopCloser(bytes.NewReader(body))
 			next.ServeHTTP(w, r)
 
 		case r.Method == http.MethodGet && r.URL.Path == "/v0/jobs":
@@ -73,6 +51,38 @@ func bindNodeID(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		}
 	})
+}
+
+func nodePostPath(path string) bool {
+	switch path {
+	case "/v0/listing", "/v0/heartbeat", "/v0/decline", "/v0/report":
+		return true
+	default:
+		return false
+	}
+}
+
+func readPostNode(w http.ResponseWriter, r *http.Request) (string, bool) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxBindBody+1))
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return "", false
+	}
+	if len(body) > maxBindBody {
+		http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+		return "", false
+	}
+	var probe struct{ NodeID string }
+	if err := json.Unmarshal(body, &probe); err != nil {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return "", false
+	}
+	if probe.NodeID == "" {
+		http.Error(w, "missing NodeID", http.StatusBadRequest)
+		return "", false
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	return probe.NodeID, true
 }
 
 // authorize writes 401/403 and returns false when the caller's SPIFFE

@@ -4,11 +4,12 @@
 import base64
 import json
 import requests
-import subprocess
 import sys
 from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
+
+REQUEST_TIMEOUT = 30
 
 def load_private_key(key_path):
     """Load Ed25519 private key from PEM file."""
@@ -33,7 +34,7 @@ def authenticate(base_url, private_key_path, device_name="test-device"):
     # Step 1: Get a nonce
     challenge_url = f"{base_url}/api/auth/challenge"
     print(f"[*] Getting nonce from {challenge_url}")
-    resp = requests.get(challenge_url)
+    resp = requests.get(challenge_url, timeout=REQUEST_TIMEOUT)
     if resp.status_code != 200:
         print(f"[!] Failed to get nonce: {resp.status_code} {resp.text}")
         return None
@@ -62,14 +63,14 @@ def authenticate(base_url, private_key_path, device_name="test-device"):
     }
 
     print(f"[*] Authenticating at {connect_url}")
-    resp = requests.post(connect_url, json=payload)
+    resp = requests.post(connect_url, json=payload, timeout=REQUEST_TIMEOUT)
     if resp.status_code != 200:
         print(f"[!] Authentication failed: {resp.status_code} {resp.text}")
         return None
 
     result = resp.json()
     token = result.get('token')
-    print(f"[*] Authentication successful!")
+    print("[*] Authentication successful!")
     print(f"[*] Token: {token[:50]}..." if token else "[!] No token in response")
 
     return token
@@ -80,7 +81,7 @@ def query_api(base_url, endpoint, token):
     headers = {"Authorization": f"Bearer {token}"}
 
     print(f"\n[*] Querying {endpoint}")
-    resp = requests.get(url, headers=headers)
+    resp = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
 
     print(f"    Status: {resp.status_code}")
     if resp.status_code == 200:
@@ -88,12 +89,19 @@ def query_api(base_url, endpoint, token):
             data = resp.json()
             print(f"    Response (first 200 chars): {json.dumps(data, indent=2)[:200]}...")
             return data
-        except:
+        except ValueError:
             print(f"    Response: {resp.text[:200]}...")
     else:
         print(f"    Error: {resp.text}")
 
     return None
+
+def print_available_files(config_dir):
+    if not config_dir.exists():
+        return
+    for entry in config_dir.rglob("*"):
+        if entry.is_file():
+            print(f"    {entry.relative_to(config_dir)}")
 
 def main():
     base_url = "http://localhost:8080"
@@ -103,13 +111,10 @@ def main():
     if not private_key_path.exists():
         print(f"[!] Private key not found at {private_key_path}")
         print(f"[*] Available files in {config_dir}:")
-        if config_dir.exists():
-            for f in config_dir.rglob("*"):
-                if f.is_file():
-                    print(f"    {f.relative_to(config_dir)}")
+        print_available_files(config_dir)
         return 1
 
-    print(f"[*] SoHoLINK API Test")
+    print("[*] SoHoLINK API Test")
     print(f"[*] Base URL: {base_url}")
     print(f"[*] Private key: {private_key_path}")
 
@@ -131,7 +136,7 @@ def main():
         if endpoint in ["/api/version", "/api/health"]:
             # These are public, don't need token
             print(f"\n[*] Querying {endpoint} (public)")
-            resp = requests.get(f"{base_url}{endpoint}")
+            resp = requests.get(f"{base_url}{endpoint}", timeout=REQUEST_TIMEOUT)
             print(f"    Status: {resp.status_code}")
             if resp.status_code == 200:
                 print(f"    Response: {resp.text[:150]}...")
