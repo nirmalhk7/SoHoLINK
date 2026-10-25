@@ -9,8 +9,8 @@ import (
 // InternalAPIServer is the SoHoLINK orchestrator's internal HTTP server.
 // Unlike APIServer, this listener is bound to a Docker-network-only address
 // and serves plain HTTP. It is not exposed via the Cloudflare tunnel.
-// The single endpoint POST /internal/jobs/submit is called by the portal
-// process to submit consumer jobs to the orchestrator's NodeRegistry —
+// The job submit and preflight endpoints are called by the portal
+// process against the orchestrator's NodeRegistry —
 // the one that actually receives agent heartbeats.
 //
 // Trust model: the listener address binding is the security boundary. The
@@ -25,6 +25,7 @@ type InternalAPIServer struct {
 func NewInternal(orch jobSubmitter, addr string) *InternalAPIServer {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /internal/jobs/submit", handleInternalSubmitJob(orch))
+	mux.HandleFunc("POST /internal/jobs/preflight", handleInternalPreflightJob(orch))
 
 	return &InternalAPIServer{
 		srv: &http.Server{
