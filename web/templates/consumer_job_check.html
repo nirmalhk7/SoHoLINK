@@ -1,0 +1,51 @@
+{{define "content"}}
+<div class="container">
+  {{template "transitional_banner" .}}
+  <div class="page-header">
+    <div><div class="page-header-label">Marketplace</div><h2>Check my job</h2></div>
+  </div>
+  <p>Check whether your compute job matches hardware currently offered on this coordinator. No job is created until you submit.</p>
+  {{if .Error}}<div class="card" role="alert"><p>{{.Error}}</p></div>{{end}}
+  {{with .Result}}
+  <section class="card" aria-labelledby="availability-heading" style="margin:1.5rem 0;">
+    {{if .Ready}}<h3 id="availability-heading">Matches available hardware</h3>{{else}}<h3 id="availability-heading">Cannot place this job now</h3>{{end}}
+    {{if .HardwareChecked}}<p>{{.EligibleNodes}} eligible now; {{.RequiredNodes}} required for this job.</p>{{else}}<p>Hardware availability was not checked because the image needs attention.</p>{{end}}
+    <p>Checked <time datetime="{{.CheckedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.CheckedAt.Format "2006-01-02 15:04:05 UTC"}}</time>.</p>
+    <p>This is not a reservation or an execution guarantee. Availability, consent, and image approval are checked again on submission. The agent performs its own checks before running.</p>
+  </section>
+  {{end}}
+  {{if .Result}}{{if not .Result.Ready}}
+  <div class="card" style="margin-bottom:1.5rem;">
+    <h3>What prevents a match</h3>
+    {{if .Blockers}}<ul>{{range .Blockers}}<li>{{.}}</li>{{end}}</ul>
+    <p>Each node is counted at its first failed check. Your own nodes are excluded. Adjust requirements only if your job permits it.</p>
+    {{else}}<p>No eligible nodes are currently registered for this request. Check again later.</p>{{end}}
+  </div>
+  {{end}}{{end}}
+  <form method="POST" action="/consumer/job/check" class="card">
+    <div class="form-group">
+      <label for="container-image">Approved container image</label>
+      <input id="container-image" name="container_image" type="text" value="{{.Form.ContainerImage}}" placeholder="image@sha256:…" required aria-describedby="image-help">
+      <p id="image-help">Use an image approved by this coordinator, pinned to its SHA-256 digest. Tags alone are not accepted.</p>
+    </div>
+    <div class="form-group">
+      <label for="workload-type">Workload</label>
+      <select id="workload-type" name="workload_type">
+        <option value="batch_compute" {{if eq .Form.WorkloadType "batch_compute"}}selected{{end}}>Batch compute</option>
+        <option value="ai_inference" {{if eq .Form.WorkloadType "ai_inference"}}selected{{end}}>AI inference</option>
+        <option value="app_hosting" {{if eq .Form.WorkloadType "app_hosting"}}selected{{end}}>App hosting</option>
+      </select>
+    </div>
+    <div class="form-group"><label for="cpu-cores">CPU cores</label><input id="cpu-cores" type="number" name="cpu_cores" min="1" step="1" value="{{.Form.CPUCores}}" required></div>
+    <div class="form-group"><label for="ram-mb">RAM (MB)</label><input id="ram-mb" type="number" name="ram_mb" min="1" step="1" value="{{.Form.RAMMB}}" required></div>
+    <div class="form-group"><label for="storage-gb">Disk (GB)</label><input id="storage-gb" type="number" name="storage_gb" min="0" step="1" value="{{.Form.StorageGB}}" required></div>
+    <div class="form-group"><label for="country">Required country (optional)</label><input id="country" type="text" name="country" maxlength="2" value="{{.Form.Country}}" placeholder="US" aria-describedby="country-help"><p id="country-help">Two-letter country code. Leave empty to accept any country. Your location is never used to fill this in.</p></div>
+    <div class="form-group"><label for="gpu-required"><input id="gpu-required" name="gpu_required" type="checkbox" value="true" {{if .Form.GPURequired}}checked{{end}}> GPU required</label></div>
+    <button type="submit" class="btn btn-outline">Check availability</button>
+    {{if .Result}}{{if .Result.Ready}}<button type="submit" formaction="/consumer/job/check/submit" class="btn btn-primary">Submit job</button>{{end}}{{end}}
+    <p><a href="/consumer/marketplace">Review marketplace rates</a> before submitting. Availability is checked again when you submit.</p>
+  </form>
+  <p style="margin-top:1rem;"><a href="/consumer/marketplace">Back to marketplace</a></p>
+</div>
+{{end}}
+{{template "layout" .}}

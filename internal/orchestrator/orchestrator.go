@@ -158,12 +158,10 @@ func loadAllowlist(path string) (*agent.Allowlist, error) {
 	return al, nil
 }
 
-// SubmitJob validates the request, finds matching nodes, runs them through
-// the scheduler, writes the job to PostgreSQL, generates a signed job token,
-// and returns the placement result.
-func (o *Orchestrator) SubmitJob(ctx context.Context, req SubmitJobRequest) (SubmitJobResponse, error) {
+// validateSubmission is shared by preflight and dispatch.
+func (o *Orchestrator) validateSubmission(req SubmitJobRequest) error {
 	if err := req.Validate(); err != nil {
-		return SubmitJobResponse{}, fmt.Errorf("submit job: %w", err)
+		return fmt.Errorf("submit job: %w", err)
 	}
 
 	// Defense 3 (B7 commit 5): verify marketplace workload type, mapping,
@@ -171,22 +169,33 @@ func (o *Orchestrator) SubmitJob(ctx context.Context, req SubmitJobRequest) (Sub
 	// on missing or unparseable allowlist (no allowlist = no submits).
 	al, err := loadAllowlist(o.allowlistPath)
 	if err != nil {
-		return SubmitJobResponse{}, fmt.Errorf("submit job: %w", err)
+		return fmt.Errorf("submit job: %w", err)
 	}
 	entry, err := al.Lookup(req.ContainerImage)
 	if err != nil {
-		return SubmitJobResponse{}, fmt.Errorf("submit job: image not in allowlist: %w", err)
+		return fmt.Errorf("submit job: image not in allowlist: %w", err)
 	}
 	expectedAgentType, ok := marketplaceToAgent[req.WorkloadType]
 	if !ok {
 		// Should be unreachable: req.Validate() rejects unknown marketplace
 		// types, and MustValidateWorkloadMapping at startup ensures every
 		// known type has a mapping entry.
-		return SubmitJobResponse{}, fmt.Errorf("submit job: no mapping for workload type %q", req.WorkloadType)
+		return fmt.Errorf("submit job: no mapping for workload type %q", req.WorkloadType)
 	}
 	if entry.Type != expectedAgentType {
-		return SubmitJobResponse{}, fmt.Errorf("submit job: workload type mismatch: marketplace=%s maps to agent=%s, but allowlist entry for %s declares agent=%s",
-			req.WorkloadType, expectedAgentType, req.ContainerImage, entry.Type)
+		return fmt.Errorf("%w: marketplace=%s maps to agent=%s, but allowlist entry for %s declares agent=%s",
+			errWorkloadImageMismatch, req.WorkloadType, expectedAgentType, req.ContainerImage, entry.Type)
+	}
+
+	return nil
+}
+
+// SubmitJob validates the request, finds matching nodes, runs them through
+// the scheduler, writes the job to PostgreSQL, generates a signed job token,
+// and returns the placement result.
+func (o *Orchestrator) SubmitJob(ctx context.Context, req SubmitJobRequest) (SubmitJobResponse, error) {
+	if err := o.validateSubmission(req); err != nil {
+		return SubmitJobResponse{}, err
 	}
 
 	candidates, err := o.registry.FindMatch(MatchRequest{

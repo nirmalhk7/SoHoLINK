@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/NetworkTheoryAppliedResearchInstitute/soholink/internal/agent"
 	"github.com/NetworkTheoryAppliedResearchInstitute/soholink/internal/sounding"
 	"github.com/NetworkTheoryAppliedResearchInstitute/soholink/internal/types"
 )
@@ -211,66 +210,7 @@ func (r *NodeRegistry) FindMatch(req MatchRequest) ([]NodeEntry, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	excluded := make(map[string]bool, len(req.ExcludedNodeIDs))
-	for _, id := range req.ExcludedNodeIDs {
-		excluded[id] = true
-	}
-
-	var candidates []NodeEntry
-	for _, node := range r.nodes {
-		if excluded[node.NodeID] {
-			continue
-		}
-		// Same-owner exclusion, all workload types (see the field comment on
-		// ExcludeConsumerParticipantID). Applies even when WorkloadType is ""
-		// so legacy callers cannot route around it.
-		if req.ExcludeConsumerParticipantID != "" && node.ParticipantID == req.ExcludeConsumerParticipantID {
-			continue
-		}
-		if node.Status != "online" {
-			continue
-		}
-		if req.CountryConstraint != "" && node.CountryCode != req.CountryConstraint {
-			continue
-		}
-		if req.GPURequired && !node.HardwareProfile.GPUPresent {
-			continue
-		}
-		if node.HardwareProfile.CPUCores < req.CPUCores {
-			continue
-		}
-		if node.HardwareProfile.RAMMB < req.RAMMB {
-			continue
-		}
-		if node.HardwareProfile.StorageGB < req.StorageGB {
-			continue
-		}
-		// Opt-out filter. If WorkloadType is set and maps to a known agent
-		// category, skip nodes that have opted out of that category. Printing
-		// additionally requires at least one enabled printer.
-		if req.WorkloadType != "" {
-			if cat, err := MarketplaceToAgent(req.WorkloadType); err == nil {
-				switch cat {
-				case agent.WorkloadCompute:
-					if node.OptOutCompute {
-						continue
-					}
-				case agent.WorkloadStorage:
-					if node.OptOutStorage {
-						continue
-					}
-				case agent.WorkloadPrintTraditional, agent.WorkloadPrint3D:
-					if node.OptOutPrinting || !node.HasEnabledPrinter {
-						continue
-					}
-					// C5's self-print exclusion previously lived here; the
-					// same-owner check now runs for every workload at the top
-					// of the candidate loop.
-				}
-			}
-		}
-		candidates = append(candidates, node)
-	}
+	candidates, _ := r.matchLocked(req)
 	if len(candidates) == 0 {
 		return nil, fmt.Errorf("no available nodes match request")
 	}

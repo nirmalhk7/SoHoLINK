@@ -24,6 +24,7 @@ SoHoLINK is the **coordinator** of a JFA **substrate**: node-side orchestration 
 | **Fee legibility** | Fees exist only as coordinator-signed `FeeDeclaration` messages — authored, legible, contestable | Protocol `fees/` package + SPEC |
 | **Fiat stays fiat; credit stays home** | Settlement is pure fiat (Stripe Connect); no tokens, no wallets; strictly separate from any front end's member-issued credit | CLAUDE.md invariant; payment package touches Stripe only |
 | **No information asymmetry** | Pricing, metering, and earnings visible to all participants | Portal surfaces; metering tables |
+| **Placement legibility** | Compute preflight shares image validation and registry predicates with submission; returns aggregate first-failure reasons, without node/owner identifiers; own nodes stay excluded | `TestMatchExplanationUsesPlacementFilters`, `TestMatchExplanationHidesOwnAndExcludedNodes`, `TestJobCheckRendersRealEligibilityWithoutIdentities` |
 | **Governance surface separated** | Admin portal on a separate local-only port, never exposed publicly, not role-flags on the public portal | Deploy configuration |
 | **Provenance inbound = outbound** | AGPL-3.0; DCO (`Signed-off-by` per commit), no CLA | License; DCO workflow (see stand-ins: enforcement suspended as a named interim) |
 
@@ -42,3 +43,26 @@ Consumes `sohocloud-protocol` at a published version tag — the dependency leaf
 ## Product-specific notes (last, per the ordering rule)
 
 Reference deployment at soholink.org; trust domain `spiffe://soholink.org`. Cloudy is the reference front end. Neither is privileged by the protocol.
+
+The transitional member marketplace links to **Check my job** at
+`/consumer/job/check`. App hosting, batch compute, and AI inference can be
+checked against the current image allowlist and registered hardware. Country,
+CPU, RAM, GPU, disk, ownership exclusion, and resource opt-out checks are the
+same ones used by dispatch. Each excluded node is counted at its first failed
+check, so a reason count is not a separate census of all nodes failing that
+condition. Own and explicitly excluded nodes are omitted entirely.
+
+Preflight reads local coordinator state only: it does not schedule, reserve,
+create jobs, generate job tokens, touch payments, or record submitted demand.
+`TestJobPreflightIsReadOnlyAndRechecksAvailability` exercises it with no DB,
+token secret, or scheduler. Confirmation uses `SubmitJob` again, so a preview
+cannot bypass a later opt-out or image change. All new portal routes require
+the existing member session. The UI remains frontend-owned transitional code;
+no person fields or preview messages are added to the shared protocol.
+
+**Limits:** the existing submission path uses `SLAStandard` (one node).
+Readiness reports advertised eligibility, not free-resource reservation or
+runtime success. Heartbeats and opt-out synchronization can lag; the agent's
+local gates remain authoritative. Pricing, credit, reputation, and governance
+rules are unchanged. These behavioral tests are not new Janus registry bindings
+and do not certify whole-stack conformance.

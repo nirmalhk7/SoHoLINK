@@ -366,6 +366,12 @@ func New(db *store.DB, addr string, privateKey ed25519.PrivateKey, templatesDir 
 		RequireAuth(sm, http.HandlerFunc(ps.handleConsumerMarketplace)))
 	mux.Handle("POST /consumer/job",
 		RequireAuth(sm, http.HandlerFunc(ps.handleSubmitJob)))
+	mux.Handle("GET /consumer/job/check",
+		RequireAuth(sm, http.HandlerFunc(ps.handleJobCheck)))
+	mux.Handle("POST /consumer/job/check",
+		RequireAuth(sm, http.HandlerFunc(ps.handleJobCheck)))
+	mux.Handle("POST /consumer/job/check/submit",
+		RequireAuth(sm, http.HandlerFunc(ps.handleCheckedJobSubmit)))
 	mux.Handle("GET /consumer/job/{id}",
 		RequireAuth(sm, http.HandlerFunc(ps.handleJobStatus)))
 	mux.Handle("GET /consumer/job/{id}/status-stream",
@@ -1855,7 +1861,6 @@ func (ps *PortalServer) handleGenerateNodeToken(w http.ResponseWriter, r *http.R
 	data.RegToken = token
 	ps.renderTemplate(w, "dashboard.html", data)
 }
-
 
 // formatOptOutSyncStatus returns the per-node sync-status string for the UI.
 // Uses last_heartbeat_at vs opt_out_updated_at as a heuristic: if the node
