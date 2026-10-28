@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -10,7 +11,7 @@ import (
 )
 
 type jobPreflighter interface {
-	PreflightJob(orchestrator.SubmitJobRequest) (orchestrator.JobPreflight, error)
+	PreflightJob(context.Context, orchestrator.SubmitJobRequest) (orchestrator.JobPreflight, error)
 }
 
 // Uses the same private listener and live registry as job submission.
@@ -28,7 +29,7 @@ func handleInternalPreflightJob(orch jobSubmitter) http.HandlerFunc {
 			writeError(w, http.StatusServiceUnavailable, "preflight unavailable")
 			return
 		}
-		result, err := checker.PreflightJob(req)
+		result, err := checker.PreflightJob(r.Context(), req)
 		if err != nil {
 			if errors.Is(err, orchestrator.ErrInvalidPreflight) {
 				writeError(w, http.StatusBadRequest, "invalid preflight request")

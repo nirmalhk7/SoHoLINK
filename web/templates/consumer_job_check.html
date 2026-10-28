@@ -42,9 +42,23 @@
     <div class="form-group"><label for="country">Required country (optional)</label><input id="country" type="text" name="country" maxlength="2" value="{{.Form.Country}}" placeholder="US" aria-describedby="country-help"><p id="country-help">Two-letter country code. Leave empty to accept any country. Your location is never used to fill this in.</p></div>
     <div class="form-group"><label for="gpu-required"><input id="gpu-required" name="gpu_required" type="checkbox" value="true" {{if .Form.GPURequired}}checked{{end}}> GPU required</label></div>
     <button type="submit" class="btn btn-outline">Check availability</button>
-    {{if .Result}}{{if .Result.Ready}}<button type="submit" formaction="/consumer/job/check/submit" class="btn btn-primary">Submit job</button>{{end}}{{end}}
     <p><a href="/consumer/marketplace">Review marketplace rates</a> before submitting. Availability is checked again when you submit.</p>
   </form>
+  {{if .Result}}{{if .Result.Ready}}{{if not .SubmissionFailed}}
+  <form method="POST" action="/consumer/job/check/submit" class="card" style="margin-top:1rem;">
+    <h3>Submit checked requirements</h3>
+    <p>This submits the requirements shown in the availability check. To change them, edit the form above and check availability again.</p>
+    <input type="hidden" name="container_image" value="{{.Form.ContainerImage}}">
+    <input type="hidden" name="workload_type" value="{{.Form.WorkloadType}}">
+    <input type="hidden" name="cpu_cores" value="{{.Form.CPUCores}}">
+    <input type="hidden" name="ram_mb" value="{{.Form.RAMMB}}">
+    <input type="hidden" name="storage_gb" value="{{.Form.StorageGB}}">
+    <input type="hidden" name="country" value="{{.Form.Country}}">
+    {{if .Form.GPURequired}}<input type="hidden" name="gpu_required" value="true">{{end}}
+    <p>{{.Form.ContainerImage}} · {{.Form.WorkloadType}} · {{.Form.CPUCores}} CPU cores · {{.Form.RAMMB}} MB RAM · {{.Form.StorageGB}} GB disk · {{if .Form.Country}}{{.Form.Country}}{{else}}Any country{{end}} · {{if .Form.GPURequired}}GPU required{{else}}GPU optional{{end}}</p>
+    <button type="submit" class="btn btn-primary">Submit job</button>
+  </form>
+  {{end}}{{end}}{{end}}
   <p style="margin-top:1rem;"><a href="/consumer/marketplace">Back to marketplace</a></p>
 </div>
 {{end}}

@@ -75,7 +75,7 @@ func TestJobPreflightIsReadOnlyAndRechecksAvailability(t *testing.T) {
 	o.AttachDemandSounding(sink, testLadder())
 	req := SubmitJobRequest{ConsumerID: "buyer", WorkloadType: types.MarketplaceBatchCompute, ContainerImage: instrComputeImage, CPUCores: 2, RAMMB: 4096}
 	before := time.Now()
-	preview, err := o.PreflightJob(req)
+	preview, err := o.PreflightJob(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,30 +90,36 @@ func TestJobPreflightIsReadOnlyAndRechecksAvailability(t *testing.T) {
 		t.Fatal("preview reserved capacity")
 	}
 	r.UpdateOptOut("one", NodeOptOutState{OptOutCompute: true})
-	preview, err = o.PreflightJob(req)
+	preview, err = o.PreflightJob(context.Background(), req)
 	if err != nil || preview.Ready {
 		t.Fatalf("preview ignored new opt-out: %+v %v", preview, err)
 	}
+	if len(sink.shapes) != 0 || len(sink.rejs) != 0 {
+		t.Fatal("blocked preview polluted submitted demand")
+	}
 	if _, err := o.SubmitJob(context.Background(), req); err == nil || !strings.Contains(err.Error(), "find nodes") {
 		t.Fatalf("submission did not recheck: %v", err)
+	}
+	if len(sink.rejs) != 1 || len(sink.shapes) != 1 {
+		t.Fatalf("submission must record one rejection and shape: %+v %+v", sink.rejs, sink.shapes)
 	}
 }
 
 func TestJobPreflightChecksImageAndComputeScope(t *testing.T) {
 	o := New(nil, NewNodeRegistry(), nil, nil, writeInstrAllowlist(t), false, 0)
 	req := SubmitJobRequest{ConsumerID: "buyer", WorkloadType: types.MarketplaceBatchCompute, ContainerImage: "ubuntu:latest", CPUCores: 2, RAMMB: 4096}
-	preview, err := o.PreflightJob(req)
+	preview, err := o.PreflightJob(context.Background(), req)
 	if err != nil || preview.Ready || len(preview.Blockers) != 1 || preview.Blockers[0].Code != "image_not_allowed" {
 		t.Fatalf("unpinned image: %+v %v", preview, err)
 	}
 	req.ContainerImage = instrComputeImage
 	req.WorkloadType = types.MarketplaceObjectStorage
-	if _, err := o.PreflightJob(req); err == nil {
+	if _, err := o.PreflightJob(context.Background(), req); err == nil {
 		t.Fatal("storage entered compute-only preflight")
 	}
 	req.WorkloadType = types.MarketplaceBatchCompute
 	o.allowlistPath = "missing-allowlist"
-	if _, err := o.PreflightJob(req); err == nil {
+	if _, err := o.PreflightJob(context.Background(), req); err == nil {
 		t.Fatal("missing configuration reported as available")
 	}
 }
@@ -134,7 +140,7 @@ func TestJobPreflightRejectsImageWorkloadMismatch(t *testing.T) {
 	}
 	o := New(nil, NewNodeRegistry(), nil, nil, path, false, 0)
 	req := SubmitJobRequest{ConsumerID: "buyer", WorkloadType: types.MarketplaceBatchCompute, ContainerImage: instrComputeImage, CPUCores: 2, RAMMB: 4096}
-	result, err := o.PreflightJob(req)
+	result, err := o.PreflightJob(context.Background(), req)
 	if err != nil || result.Ready || result.HardwareChecked || len(result.Blockers) != 1 || result.Blockers[0].Code != "workload_mismatch" {
 		t.Fatalf("mismatched image: %+v %v", result, err)
 	}

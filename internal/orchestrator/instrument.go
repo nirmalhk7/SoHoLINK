@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"math"
 
 	"github.com/google/uuid"
 
@@ -18,7 +19,13 @@ import (
 // shapeDims projects a SubmitJobRequest onto the demand-sounding units:
 // CPU in vCPU, memory in MB, disk in MB (StorageGB is GB → ×1024).
 func shapeDims(req SubmitJobRequest) (cpu float64, memMB, diskMB int64) {
-	return float64(req.CPUCores), int64(req.RAMMB), int64(req.StorageGB) * 1024
+	disk := int64(req.StorageGB)
+	if disk > math.MaxInt64/1024 {
+		diskMB = math.MaxInt64
+	} else {
+		diskMB = disk * 1024
+	}
+	return float64(req.CPUCores), int64(req.RAMMB), diskMB
 }
 
 // recordPlacement records the shape of a job that WAS placed (Placed=true),

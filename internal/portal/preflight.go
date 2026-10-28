@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,7 +15,7 @@ import (
 )
 
 type jobPreflighter interface {
-	PreflightJob(orchestrator.SubmitJobRequest) (orchestrator.JobPreflight, error)
+	PreflightJob(context.Context, orchestrator.SubmitJobRequest) (orchestrator.JobPreflight, error)
 }
 
 type jobCheckForm struct {
@@ -23,12 +24,13 @@ type jobCheckForm struct {
 }
 
 type jobCheckData struct {
-	Email           string
-	IsAuthenticated bool
-	Form            jobCheckForm
-	Result          *orchestrator.JobPreflight
-	Blockers        []string
-	Error           string
+	Email            string
+	IsAuthenticated  bool
+	Form             jobCheckForm
+	Result           *orchestrator.JobPreflight
+	Blockers         []string
+	Error            string
+	SubmissionFailed bool
 }
 
 func (ps *PortalServer) handleJobCheck(w http.ResponseWriter, r *http.Request) {
@@ -46,7 +48,7 @@ func (ps *PortalServer) handleJobCheck(w http.ResponseWriter, r *http.Request) {
 		data.Error = err.Error()
 		w.WriteHeader(http.StatusBadRequest)
 	} else {
-		status := ps.checkJob(&data, req)
+		status := ps.checkJob(r.Context(), &data, req)
 		if status != http.StatusOK {
 			w.WriteHeader(status)
 		}
@@ -96,13 +98,13 @@ func parseComputeJob(w http.ResponseWriter, r *http.Request, consumer string) (j
 	return f, req, nil
 }
 
-func (ps *PortalServer) checkJob(data *jobCheckData, req orchestrator.SubmitJobRequest) int {
+func (ps *PortalServer) checkJob(ctx context.Context, data *jobCheckData, req orchestrator.SubmitJobRequest) int {
 	checker, ok := ps.orch.(jobPreflighter)
 	if !ok {
 		data.Error = "Availability check is unavailable. Please try again later."
 		return http.StatusServiceUnavailable
 	}
-	result, err := checker.PreflightJob(req)
+	result, err := checker.PreflightJob(ctx, req)
 	if err != nil {
 		if errors.Is(err, orchestrator.ErrInvalidPreflight) {
 			data.Error = "Check the compute job requirements."
@@ -114,20 +116,7 @@ func (ps *PortalServer) checkJob(data *jobCheckData, req orchestrator.SubmitJobR
 	}
 	data.Result = &result
 	for _, b := range result.Blockers {
-		text := map[string]string{
-			"offline": "Nodes are offline.", "country": "Nodes are outside your required country.",
-			"gpu": "Nodes do not advertise a GPU.", "cpu": "Nodes have fewer CPU cores than requested.",
-			"ram": "Nodes have less RAM than requested.", "storage": "Nodes have less disk than requested.",
-			"compute_disabled":  "Nodes are not offering compute work.",
-			"image_not_allowed": "Image is not approved. Use a digest-pinned image from the coordinator's allowlist.",
-			"workload_mismatch": "This approved image does not support the selected workload type.",
-		}[b.Code]
-		if text != "" {
-			if b.Code != "image_not_allowed" && b.Code != "workload_mismatch" {
-				text = fmt.Sprintf("%d: %s", b.Count, text)
-			}
-			data.Blockers = append(data.Blockers, text)
-		}
+		data.Blockers = append(data.Blockers, b.Description())
 	}
 	return http.StatusOK
 }
@@ -154,11 +143,12 @@ func (ps *PortalServer) handleCheckedJobSubmit(w http.ResponseWriter, r *http.Re
 	resp, err := ps.orch.SubmitJob(r.Context(), req)
 	if err != nil {
 		slog.Warn("checked job submission failed", "error", err)
-		status := ps.checkJob(&data, req)
+		status := ps.checkJob(r.Context(), &data, req)
 		if status == http.StatusOK {
 			status = http.StatusConflict
-			data.Error = "Job submission could not be confirmed. Check your dashboard before trying again."
 		}
+		data.SubmissionFailed = true
+		data.Error = "Job submission could not be confirmed. Check your dashboard before trying again."
 		w.WriteHeader(status)
 		ps.renderTemplate(w, "consumer_job_check.html", data)
 		return

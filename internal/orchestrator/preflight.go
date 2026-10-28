@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -20,6 +21,38 @@ var errWorkloadImageMismatch = errors.New("submit job: workload type mismatch")
 type MatchBlocker struct {
 	Code  string
 	Count int
+}
+
+// Ordered by the first failed placement check. The portal uses the same catalog
+// to describe the aggregate reasons returned by the private API.
+var blockerReasons = []struct{ code, description string }{
+	{"offline", "Nodes are offline."},
+	{"country", "Nodes are outside your required country."},
+	{"gpu", "Nodes do not advertise a GPU."},
+	{"cpu", "Nodes have fewer CPU cores than requested."},
+	{"ram", "Nodes have less RAM than requested."},
+	{"storage", "Nodes have less disk than requested."},
+	{"compute_disabled", "Nodes are not offering compute work."},
+	{"storage_disabled", "Nodes are not offering storage work."},
+	{"printing_disabled", "Nodes are not offering printing work."},
+	{"image_not_allowed", "Image is not approved. Use a digest-pinned image from the coordinator's allowlist."},
+	{"workload_mismatch", "This approved image does not support the selected workload type."},
+}
+
+// Description explains a blocker without disclosing node identities. Unknown
+// codes can arrive from a newer coordinator and must not imply an empty registry.
+func (b MatchBlocker) Description() string {
+	text := "Nodes cannot meet another placement requirement."
+	for _, reason := range blockerReasons {
+		if reason.code == b.Code {
+			text = reason.description
+			break
+		}
+	}
+	if b.Code == "image_not_allowed" || b.Code == "workload_mismatch" {
+		return text
+	}
+	return fmt.Sprintf("%d: %s", b.Count, text)
 }
 
 // MatchExplanation is a point-in-time aggregate, never a capacity reservation.
@@ -57,9 +90,9 @@ func (r *NodeRegistry) matchLocked(req MatchRequest) ([]NodeEntry, MatchExplanat
 		candidates = append(candidates, node)
 	}
 	report := MatchExplanation{EligibleNodes: len(candidates)}
-	for _, code := range []string{"offline", "country", "gpu", "cpu", "ram", "storage", "compute_disabled", "storage_disabled", "printing_disabled"} {
-		if counts[code] > 0 {
-			report.Blockers = append(report.Blockers, MatchBlocker{Code: code, Count: counts[code]})
+	for _, reason := range blockerReasons {
+		if counts[reason.code] > 0 {
+			report.Blockers = append(report.Blockers, MatchBlocker{Code: reason.code, Count: counts[reason.code]})
 		}
 	}
 	return candidates, report
@@ -113,7 +146,7 @@ type JobPreflight struct {
 // telemetry, job creation, or payment. SubmitJob repeats validation and matching
 // on confirmation. Readiness is registry eligibility, not a runtime guarantee:
 // agents retain their local consent and execution gates.
-func (o *Orchestrator) PreflightJob(req SubmitJobRequest) (JobPreflight, error) {
+func (o *Orchestrator) PreflightJob(_ context.Context, req SubmitJobRequest) (JobPreflight, error) {
 	result := JobPreflight{RequiredNodes: int(SLAStandard), CheckedAt: time.Now().UTC()}
 	if err := req.Validate(); err != nil {
 		return result, fmt.Errorf("%w: %v", ErrInvalidPreflight, err)

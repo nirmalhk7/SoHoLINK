@@ -3,8 +3,10 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -86,13 +88,15 @@ func writeInstrAllowlist(t *testing.T) string {
 	return path
 }
 
+const findNodesError = "find nodes"
+
 const instrComputeImage = "soholink/compute-worker@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
 // TestSubmitJob_Rejection_RecordsReasonAndOperatorID: on the no-nodes path
 // (empty registry, which fails inside FindMatch BEFORE any DB access), the
 // instrumentation must emit a rejection carrying the authenticated operator_id
 // and a valid reason, plus an unplaced job-shape — while SubmitJob returns its
-// usual "find nodes" error unchanged.
+// usual findNodesError error unchanged.
 func TestSubmitJob_Rejection_RecordsReasonAndOperatorID(t *testing.T) {
 	rec := &captureRecorder{}
 	orch := New(nil, NewNodeRegistry(), nil, nil, writeInstrAllowlist(t), false, 0)
@@ -107,7 +111,7 @@ func TestSubmitJob_Rejection_RecordsReasonAndOperatorID(t *testing.T) {
 		RAMMB:          8192,
 		StorageGB:      50,
 	})
-	if err == nil || !strings.Contains(err.Error(), "find nodes") {
+	if err == nil || !strings.Contains(err.Error(), findNodesError) {
 		t.Fatalf("expected unchanged 'find nodes' error, got: %v", err)
 	}
 
@@ -155,7 +159,7 @@ func TestSubmitJob_Rejection_TooBig(t *testing.T) {
 		CPUCores:       64, // over cumulonimbus's 32 vCPU ceiling
 		RAMMB:          8192,
 	})
-	if err == nil || !strings.Contains(err.Error(), "find nodes") {
+	if err == nil || !strings.Contains(err.Error(), findNodesError) {
 		t.Fatalf("expected 'find nodes' error, got: %v", err)
 	}
 	if len(rec.rejs) != 1 {
@@ -216,7 +220,40 @@ func TestSubmitJob_NoSink_NoPanic(t *testing.T) {
 		CPUCores:       4,
 		RAMMB:          8192,
 	})
-	if err == nil || !strings.Contains(err.Error(), "find nodes") {
+	if err == nil || !strings.Contains(err.Error(), findNodesError) {
 		t.Fatalf("expected 'find nodes' error with no sink, got: %v", err)
+	}
+}
+
+// An unchecked GB-to-MB multiplication wraps large accepted requests negative.
+func TestRejectionTelemetrySaturatesDiskOverflow(t *testing.T) {
+	if strconv.IntSize < 64 {
+		t.Skip("overflow requires a 64-bit int")
+	}
+	for _, tc := range []struct {
+		name string
+		gb   int64
+		want int64
+	}{
+		{"ordinary", 20, 20480},
+		{"last exact", 9007199254740991, 9223372036854774784},
+		{"first overflow", 9007199254740992, math.MaxInt64},
+		{"largest input", math.MaxInt64, math.MaxInt64},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sink := &captureRecorder{}
+			o := New(nil, NewNodeRegistry(), nil, nil, writeInstrAllowlist(t), false, 0)
+			o.AttachDemandSounding(sink, testLadder())
+			_, err := o.SubmitJob(context.Background(), SubmitJobRequest{ConsumerID: "buyer", WorkloadType: types.MarketplaceBatchCompute, ContainerImage: instrComputeImage, CPUCores: 2, RAMMB: 4096, StorageGB: int(tc.gb)})
+			if err == nil || !strings.Contains(err.Error(), findNodesError) {
+				t.Fatalf("expected placement rejection, got %v", err)
+			}
+			if len(sink.shapes) != 1 || len(sink.rejs) != 1 {
+				t.Fatalf("missing demand telemetry: %+v %+v", sink.shapes, sink.rejs)
+			}
+			if got := sink.shapes[0].DiskMB; got != tc.want {
+				t.Fatalf("disk MB = %d, want %d", got, tc.want)
+			}
+		})
 	}
 }

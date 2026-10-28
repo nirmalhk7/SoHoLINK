@@ -60,9 +60,26 @@ cannot bypass a later opt-out or image change. All new portal routes require
 the existing member session. The UI remains frontend-owned transitional code;
 no person fields or preview messages are added to the shared protocol.
 
-**Limits:** the existing submission path uses `SLAStandard` (one node).
+**Limits:** previews that cannot be placed are not counted as rejections in demand sounding.
+The existing submission path uses `SLAStandard` (one node).
 Readiness reports advertised eligibility, not free-resource reservation or
 runtime success. Heartbeats and opt-out synchronization can lag; the agent's
 local gates remain authoritative. Pricing, credit, reputation, and governance
 rules are unchanged. These behavioral tests are not new Janus registry bindings
 and do not certify whole-stack conformance.
+
+### Check my job examples
+
+The availability check shows the checked image and resource requirements before
+confirmation. Confirmation submits that checked snapshot, even if the editable
+check form has since changed. SubmitJob validates current availability again.
+After a submission error, check the dashboard before trying again; an error may
+leave the outcome unknown. Preflight requests stop when the portal request is
+cancelled. Disk demand telemetry saturates at the maximum signed 64-bit MB value
+instead of wrapping for unusually large accepted disk inputs.
+
+These local examples use sample nodes; no worker executed the job.
+
+![Compute job availability check](docs/screenshots/compute-preflight.png)
+
+![Scheduled job after confirmation](docs/screenshots/compute-job-submitted.png)
