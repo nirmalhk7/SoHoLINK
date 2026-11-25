@@ -405,11 +405,21 @@ See [`docs/research/ML_LOAD_BALANCING.md`](docs/research/ML_LOAD_BALANCING.md) f
 go fmt ./...
 
 # Lint
-make lint  # runs golangci-lint
+golangci-lint run ./...
 
 # Vet
 go vet ./...
 ```
+
+The golangci-lint v2 configuration runs the supported static checks and treats
+`gofmt` as a formatter. Its `unused` check looks for unused declarations.
+Use the separate Go [deadcode tool](https://go.dev/blog/deadcode) to check
+whole-program reachability:
+
+- `deadcode ./...` starts from production entry points and can flag a function
+  that is reachable only through tests.
+- `deadcode -test ./...` includes test entry points and reports functions that
+  are unreachable from both production and tests.
 
 ### Commit Messages (Conventional Commits)
 
@@ -426,10 +436,9 @@ test(wasm): add executor unit tests
 ### Pre-Commit Checklist
 
 - [ ] `go build ./...` compiles (both with and without `-tags gui`)
-- [ ] `make test-short` passes
-- [ ] `make lint` clean
+- [ ] `go test -short ./...` passes
+- [ ] `golangci-lint run ./...` adds no new findings compared with the target branch
 - [ ] `go mod tidy` run if `go.mod` changed
-- [ ] `go mod vendor` run if `go.mod` changed
 
 ---
 

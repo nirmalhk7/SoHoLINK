@@ -1,7 +1,7 @@
 # Run locally: golangci-lint run ./...
-# Whole-program reachability is a separate check: deadcode -test ./...
-# The removed golangci-lint deadcode linter does not provide that analysis;
-# unused checks unused declarations within packages, not binary wiring.
+# Whole-program reachability: deadcode ./... uses production entry points.
+# deadcode -test ./... also treats test entry points as roots.
+# See DEVELOPMENT.md for when to use each check.
 version: "2"
 
 linters:

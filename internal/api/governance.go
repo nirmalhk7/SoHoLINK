@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NTARI-RAND/sohocloud-protocol/canon"
 	"github.com/NTARI-RAND/sohocloud-protocol/fees"
 	"github.com/NetworkTheoryAppliedResearchInstitute/soholink/internal/notify"
 	"github.com/NetworkTheoryAppliedResearchInstitute/soholink/internal/operator"
@@ -235,6 +236,17 @@ func (g *GovernanceServer) handlePublishFees(w http.ResponseWriter, r *http.Requ
 	effectiveAt, err := time.Parse(time.RFC3339, strings.TrimSpace(req.EffectiveAt))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "effective_at must be RFC3339")
+		return
+	}
+	if !canon.ValidTime(effectiveAt) {
+		writeError(w, http.StatusBadRequest, "effective_at must fit the protocol's signed 64-bit Unix nanosecond range")
+		return
+	}
+
+	// PostgreSQL stores effective_at to microsecond precision. Sign only
+	// timestamps that the repository can serve back exactly.
+	if !effectiveAt.Equal(effectiveAt.Truncate(time.Microsecond)) {
+		writeError(w, http.StatusBadRequest, "effective_at must be at microsecond precision or coarser")
 		return
 	}
 

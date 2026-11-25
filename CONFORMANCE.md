@@ -44,25 +44,26 @@ Consumes `sohocloud-protocol` at a published version tag — the dependency leaf
 
 This dependency draft targets sohocloud-protocol **v0.4.0**, pending publication
 and clean tagged-module verification. The reference client now requires exactly
-one JSON response document. `TestReferenceClientFeeFraming` checks the real
-`NewHandler` fee route with a signed declaration: normal JSON whitespace keeps
-the signature valid; a second response value fails. The handler, authentication,
-fee terms, and fee signatures are unchanged. The full dependency upgrade
-does not preserve v0.1.0 listing or assignment signatures. No success-body budget is
-imposed on other deployments by this dependency migration.
+one JSON response document. `TestReferenceClientFeeFraming` drives the client
+through the real `NewHandler` fee route. The client accepts the signed declaration
+with normal JSON whitespace and returns no partial result when a second value
+is appended.
+Protocol v0.4.0 also rejects signed messages with zero or out-of-range timestamps.
+The governance fee publisher returns HTTP 400 before signing if `effective_at`
+falls outside the protocol range or has finer precision than PostgreSQL can
+store (microseconds). The full dependency upgrade changes listing and
+assignment signatures relative to v0.1.0. The success-body budget remains
+opt-in at the client.
 
 Local candidate verification uses an external Go workspace, never a committed
 `replace`. After maintainers publish v0.4.0, regenerate module checksums and run
-all required build, unit, database integration, and Qlty checks without that
-workspace. The `.golangci.yml` now uses the golangci-lint v2 schema, with
-`gofmt` configured as a formatter and the supported static-analysis checks
-retained. Whole-program reachability requires the separate Go `deadcode` tool;
-`unused` is not a replacement for that analysis. Existing repository lint
-findings still require review; a valid configuration is not a clean-lint claim.
+the build, unit tests, and database integration tests without that workspace.
+Confirm DCO, the CI `test` job, and the CodeQL analysis jobs and result check on
+the updated pull request.
 
 ### Mixed-version release gate
 
-These consumers currently pin **v0.1.0**, not v0.3.0. Intervening protocol
+SoHoLINK's previous protocol pin was **v0.1.0**. Intervening protocol
 releases added GPUs, committed storage, and storage opt-in to listing canonical
 bytes and GPU requirements to assignment canonical bytes under their existing
 `v0` domains. Even empty new fields change signatures. Old/new peers cannot be

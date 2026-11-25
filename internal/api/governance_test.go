@@ -185,6 +185,40 @@ func TestGovernance_PublishFees_SignsVerifiably(t *testing.T) {
 	}
 }
 
+func TestGovernance_PublishFees_RejectsUnrepresentableEffectiveTime(t *testing.T) {
+	for _, effectiveAt := range []string{
+		"0001-01-01T00:00:00Z",
+		"1677-09-21T00:12:43.145224191Z",
+		"2262-04-11T23:47:16.854775808Z",
+	} {
+		t.Run(effectiveAt, func(t *testing.T) {
+			repo := &fakeGovRepo{}
+			handler := govMux(newTestGovServer(t, repo, notify.NewLogNotifier()))
+			body := `{"contributor_share_bps":6500,"platform_fee_bps":3500,"seq":1,"effective_at":"` + effectiveAt + `"}`
+			rec := postGov(handler, "/admin/fees", body)
+			if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "effective_at") {
+				t.Errorf("publish fees: got %d body=%s, want 400 for effective_at", rec.Code, rec.Body)
+			}
+			if len(repo.published) != 0 || repo.current != nil {
+				t.Fatal("invalid declaration reached publication")
+			}
+		})
+	}
+}
+
+func TestGovernance_PublishFees_AcceptsInRangeEffectiveTime(t *testing.T) {
+	repo := &fakeGovRepo{}
+	g := newTestGovServer(t, repo, notify.NewLogNotifier())
+	body := `{"contributor_share_bps":6500,"platform_fee_bps":3500,"seq":1,"effective_at":"2262-04-11T23:47:16.854775Z"}`
+	rec := postGov(govMux(g), "/admin/fees", body)
+	if rec.Code != http.StatusCreated || len(repo.published) != 1 {
+		t.Fatalf("publish fees: got %d body=%s; published %d declarations", rec.Code, rec.Body, len(repo.published))
+	}
+	if !repo.published[0].Verify(g.coordKey.Public().(ed25519.PublicKey)) {
+		t.Fatal("published declaration signature does not verify")
+	}
+}
+
 // A non-monotonic Seq is rejected 409 (SPEC §5.3 legible/non-retroactive).
 func TestGovernance_PublishFees_RejectsNonMonotonicSeq(t *testing.T) {
 	repo := &fakeGovRepo{}

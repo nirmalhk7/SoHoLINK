@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 
@@ -28,6 +29,9 @@ func TestReferenceClientFeeFraming(t *testing.T) {
 		if suffix == " {}" {
 			if err == nil {
 				t.Fatal("reference client accepted a second response value")
+			}
+			if !reflect.DeepEqual(got, fees.FeeDeclaration{}) {
+				t.Fatalf("framing error returned a partial fee declaration: %+v", got)
 			}
 		} else if err != nil || !got.Verify(pub) || got.Seq != 7 {
 			t.Fatalf("fee=%v error=%v", got, err)
